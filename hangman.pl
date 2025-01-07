@@ -222,3 +222,53 @@ sub get_hangman_state {
     # Return the current hangman state based on the number of attempts left
     return $hangman[$index];
 }
+
+# Generate the hidden word based on the current guessed letters
+sub generate_hidden_word {
+    my ($word) = @_;
+    my $hidden_word = '';
+    
+    for my $i (0 .. length($word) - 1) {
+        my $letter = substr($word, $i, 1);
+        if (grep { $_ eq $letter } @{ $game_state{guessed_letters} }) {
+            $hidden_word .= $letter;  # Reveal the letter if guessed
+        } else {
+            $hidden_word .= '_';  # Otherwise, hide the letter
+        }
+    }
+    
+    return $hidden_word;
+}
+
+# Function to save the current game state, including the hidden word and remaining attempts
+sub save_game {
+    my ($hidden_word, $attempts) = @_;  # Arguments: current hidden word and remaining attempts
+
+    # Update the global game state hash with the current game information
+    $game_state{hidden_word} = $hidden_word;  # Save the current hidden word
+    $game_state{remaining_attempts} = $attempts;  # Save the number of remaining attempts
+    $game_state{hangman_state} = get_hangman_state($attempts);  # Get and save the current hangman drawing based on attempts
+
+    # Write the updated game state to a file in JSON format
+    write_file($SAVE_FILE, encode_json(\%game_state));  # Save the game state in the file specified by $SAVE_FILE
+}
+
+# Function to load a saved game state from a file
+sub load_game {
+    if (-e $SAVE_FILE) {  # Check if the save file exists
+        # Read and decode the JSON file into the %game_state hash
+        %game_state = %{ decode_json(read_file($SAVE_FILE)) };
+
+        # If the game is over or already guessed, ask to start a new one
+        if ($game_state{remaining_attempts} <= 0 || generate_hidden_word($game_state{current_word}) eq $game_state{current_word}) {
+            print "Game over or word already guessed! Starting a new game.\n";
+            main_menu(); # Start a fresh game
+        } else {
+            print "Game loaded successfully! Continuing...\n";
+            play_game();  # Continue the game from where it was left off
+        }
+    } else {
+        print "No saved game found.\n";
+        main_menu();  # Return to the main menu
+    }
+}

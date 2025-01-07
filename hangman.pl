@@ -272,3 +272,132 @@ sub load_game {
         main_menu();  # Return to the main menu
     }
 }
+
+# Function to update the scoreboard by incrementing the correct player's wins
+sub update_scoreboard {
+    my ($player) = @_;  # The player whose score needs to be updated
+    my $scores = {};    # Initialize an empty hash to store the scores
+
+    # Check if the scoreboard file exists and load the existing scores
+    if (-e $SCORES_FILE) {
+        # Decode the JSON data from the scoreboard file into the $scores hash
+        $scores = decode_json(read_file($SCORES_FILE));
+    }
+
+    # If the player doesn't exist in the scoreboard, initialize their score to 0
+    # Then increment the player's score by 1
+    $scores->{$player} ||= 0;  # Initialize the player's score to 0 if not already present
+    $scores->{$player}++;      # Increment the player's score by 1
+
+    # Write the updated scoreboard back to the file
+    write_file($SCORES_FILE, encode_json($scores));  # Save the updated scores in JSON format
+}
+
+# Function to view the scoreboard, sorted by the number of wins in descending order
+sub view_scoreboard {
+    if (-e $SCORES_FILE) {  # Check if the scoreboard file exists
+        # Decode the JSON data from the scoreboard file into the $scores hash
+        my $scores = decode_json(read_file($SCORES_FILE));
+        
+        print "Scoreboard:\n";  # Print header for the scoreboard
+
+        # Sort the players by their number of wins in descending order
+        foreach my $player (sort { $scores->{$b} <=> $scores->{$a} } keys %$scores) {
+            # Print the player's name and their win count
+            print "$player: $scores->{$player} wins\n";
+        }
+    } else {
+        print "No scores available.\n";  # Inform the user if no scoreboard exists
+    }
+
+    main_menu();  # Return to the main menu after displaying the scoreboard
+}
+
+# Function to play the Hangman game
+sub play_game {
+    my $word = $game_state{current_word};  # The word to be guessed
+    my $hidden_word = generate_hidden_word($word);  # Initially generate the hidden word (with underscores)
+    my $attempts = $game_state{remaining_attempts};  # Number of remaining attempts
+    
+    # Display the hangman drawing based on the number of remaining attempts
+    display_hangman($attempts);
+
+    # Game loop: Continue until there are no attempts left
+    while ($attempts > 0) {
+        print "\nWord: $hidden_word\n";  # Display the current hidden word (with guessed letters filled in)
+        print "Guessed letters: @{ $game_state{guessed_letters} }\n";  # Display guessed letters
+        print "Attempts remaining: $attempts\n";  # Display remaining attempts
+        print "Enter a letter or type 'save' to save progress: ";  # Prompt user for input
+        my $guess = <STDIN>;  # Get the user's guess
+        chomp $guess;  # Remove newline character
+
+        # Check if the user wants to save the game
+        if ($guess eq 'save') {
+            save_game($hidden_word, $attempts);  # Save the current game state
+            print "Game progress saved!\n";  # Inform the user that progress has been saved
+            main_menu();  # Return to the main menu
+            return;  # Exit the function to stop the game
+        }
+
+        # Validate the user's input (only a single letter, alphabetic characters)
+        if ($guess !~ /^[a-zA-Z]$/ || length($guess) > 1) {
+            print "Invalid input. Enter a single letter.\n";  # Inform the user if the input is invalid
+            next;  # Skip to the next iteration of the loop
+        }
+
+        # Prevent re-guessed letters (check if the letter has already been guessed)
+        if (grep { $_ eq $guess } @{ $game_state{guessed_letters} }) {
+            print "You've already guessed that letter.\n";  # Inform the user if they've guessed the letter already
+            next;  # Skip to the next iteration of the loop
+        }
+
+        # Add the guessed letter to the list of guessed letters
+        push @{ $game_state{guessed_letters} }, $guess;
+
+        # Check if the guess is correct
+        if (index($word, $guess) != -1) {
+            print "Correct guess!\n";  # Inform the user if the guess is correct
+            # Update the hidden word with the correct guess
+            $hidden_word = generate_hidden_word($word);
+            print "Updated Word: $hidden_word\n";  # Display the updated word
+
+            # Check if the entire word is guessed correctly
+            if ($hidden_word eq $word) {
+                print colored("Congratulations! You've guessed the word: $word\n", 'bold green');
+                
+                # Update the scoreboard with the winner (Player 1 or Player 2)
+                if ($game_state{player2}) {
+                    # Multiplayer mode - Player 2 wins
+                    update_scoreboard($game_state{player2});
+                } else {
+                    # Single-player mode - Player 1 wins
+                    update_scoreboard($game_state{player1});
+                }
+
+                save_game($hidden_word, $attempts);  # Save the final game state
+                main_menu();  # Return to the main menu after the game ends
+                return;  # Exit the function to stop the game
+            }
+        } else {
+            print "Incorrect guess.\n";  # Inform the user if the guess is incorrect
+            $attempts--;  # Decrease the remaining attempts
+        }
+
+        # Check if the game is over (no attempts left)
+        if ($attempts <= 0) {
+            print colored("Game Over! The word was: $word\n", 'bold red');  # Inform the user the game is over
+            main_menu();  # Return to the main menu after the game ends
+            return;  # Exit the function to stop the game
+        }
+
+        # Display the hangman drawing after each guess (correct or incorrect)
+        display_hangman($attempts); 
+    }
+
+    # If the loop ends (game over), display the game over message
+    print colored("Game Over! The word was: $word\n", 'bold red');
+    main_menu();  # Return to the main menu after the game ends
+}
+
+# Call the main menu function to start the game
+main_menu();
